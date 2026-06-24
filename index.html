@@ -92,8 +92,8 @@
   <!-- ============ INPUTS ============ -->
   <div class="left" id="inputs">
     <div class="modeSel">
-      <button class="mode" data-mode="lei">Lei 11.181/2019</button>
-      <button class="mode active" data-mode="ous">OUS Somos Centro</button>
+      <button class="mode active" data-mode="lei">Lei 11.181/2019</button>
+      <button class="mode" data-mode="ous">OUS Somos Centro</button>
     </div>
     <div class="sec"><h3>Lote &amp; Via</h3><div class="body">
       <div class="row"><label>Testada (m)</label><input id="testada" type="number" step="0.5" value="12"></div>
@@ -114,7 +114,7 @@
 
     <div class="sec"><h3>Envelope (afastamentos)</h3><div class="body">
       <div class="row"><label>Pé-direito por pavimento (m)</label><input id="peDir" type="number" step="0.1" value="3"></div>
-      <div class="row"><label>Regime lateral/fundo</label>
+      <div class="row" id="rowRegime"><label>Regime lateral/fundo</label>
         <select id="regime">
           <option value="H">Regra do H (progressivo)</option>
           <option value="meiaTO">Mínimo até ½ TO (torre esbelta)</option>
@@ -142,7 +142,7 @@
       <div class="row" id="rowTipo"><label>Empreendimento (Anexo III)</label><select id="tipo"></select></div>
       <div class="row" id="rowSupUR"><label>% superação via UR (0–70%)</label><input id="supUR" type="number" step="0.05" value="0.1"></div>
       <div class="row"><label>Limite altimétrico – CINDACTA (m, 0=sem limite)</label><input id="altMax" type="number" step="1" value="0"></div>
-      <div class="row" id="rowPctCom"><label>% comercial da área vendável</label><input id="pctCom" type="number" step="0.05" value="0" readonly style="color:var(--accent2);background:#0a1018;border-color:#1d3a44;font-weight:600"></div>
+      <div class="row" id="rowPctCom"><label>% comercial da área vendável</label><input id="pctCom" type="number" step="0.05" value="0" readonly style="color:var(--accent2);background:#0c1626;border-color:#1d3a44;font-weight:600"></div>
     </div></div>
 
     <div class="sec"><h3>Financeiro</h3><div class="body">
@@ -598,7 +598,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') modal.classList.re
 // ---- modo Lei 11.181/2019  x  OUS Somos Centro ----
 let lastOus="OUS – Subárea 1A";
 const OUS_ONLY=['rowCenario','rowTipo','rowSupUR','rowFundo','rowVUR','rowAMIS'];
-const ALL_HIDE=[...OUS_ONLY,'rowPrazo'];
+const ALL_HIDE=[...OUS_ONLY,'rowPrazo','rowRegime'];
 
 function updateVisibility(){
   const lei=document.querySelector('.modeSel .mode[data-mode="lei"]').classList.contains('active');
@@ -621,6 +621,7 @@ function setMode(m){
   if(lei){
     if($('cenario').value!=="Não adere") lastOus=$('cenario').value;
     $('cenario').value="Não adere";
+    $('regime').value="H";   // lei 11.181 só usa Regra do H
   }else if($('cenario').value==="Não adere"){
     $('cenario').value=lastOus;
   }
