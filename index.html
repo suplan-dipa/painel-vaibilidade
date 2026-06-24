@@ -55,6 +55,8 @@
   table.fin tr.head td{color:#bcd0ff;font-weight:700;padding-top:8px;text-transform:uppercase;font-size:10.5px;letter-spacing:.4px}
   .badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:600}
   .badge.ca{background:#0e2a22;color:#34d399} .badge.geo{background:#2a230c;color:#fbbf24}
+  .badge.ur-gen{background:#0e2238;color:#38bdf8} .badge.ur-rec{background:#1e1050;color:#a78bfa}
+  .badge.amis{background:#2a1a0c;color:#fb923c} .badge.arb{background:#0e2a18;color:#4ade80}
   .floors{margin-top:10px;max-height:150px;overflow:auto;font-size:11px}
   .floors table{width:100%;border-collapse:collapse}
   .floors th,.floors td{padding:2px 5px;text-align:right;border-bottom:1px solid #1f293f}
@@ -135,6 +137,8 @@
       <div class="row" id="rowPctCA"><label>% do potencial a utilizar (CAbas→CA)</label><input id="pctCA" type="number" step="1" value="100" min="0" max="100"></div>
       <div class="row" id="rowAFP"><label>AFP – fruição pública (% do terreno)</label><input id="AFP" type="number" step="1" value="20"></div>
       <div class="row" id="rowFatorAFP"><label>Fator qualificação AFP (m² isentos/m² AFP)</label><input id="fatorAFP" type="number" step="0.1" value="1.5"></div>
+      <div class="row"><label>Largura da calçada (m)</label><input id="calcada" type="number" step="0.5" value="4" min="1"></div>
+      <div class="row" id="rowArb"><label>Arborização – 1 árvore a cada (m de testada)</label><input id="arbStep" type="number" step="1" value="10" min="1"></div>
       <div class="row" id="rowCenario"><label>Cenário OUS</label>
         <select id="cenario">
           <option selected>OUS – Subárea 1A</option>
@@ -402,6 +406,8 @@ function compute(){
 
   p.fBruta=1.7;
   p.faPct=(num('faPct')/100);
+  p.arbStep=num('arbStep');  // metros entre árvores (para draw)
+  p.calcada=Math.max(1,num('calcada')); // largura real da calçada em metros
 
   // ---- geometria ----
   const G=computeStack(p);
@@ -513,7 +519,9 @@ function compute(){
     onerav,odcArea,odc,tdc,urRec,urDesp,amis,itbi,
     vgvR,vgvC,vgvBruto,vgvDisp,cObra,cObraR,cObraC,cTer,cProj,cAdm,cComm,cMkt,cImp,
     custoTot,lucro,margem,custoM2,permuta,valTer,areaNum,fora,adere:p.adere,bindingCA:G.bindingCA,
-    nFloors:G.floors.length,altura:G.floors.length*p.peDir,caApl:p.caApl,emOp3cr,bindingAlt:G.bindingAlt});
+    nFloors:G.floors.length,altura:G.floors.length*p.peDir,caApl:p.caApl,emOp3cr,bindingAlt:G.bindingAlt,
+    isGenUR:areaNum===1&&p.adere,isRecUR:areaNum===2&&p.adere,pagaAMIS:p.adere&&usarAMIS&&amis>0,
+    arbStep:num('arbStep'),adereOUS:p.adere,testada:p.testada});
 }
 
 // ============ RENDER ============
@@ -563,7 +571,13 @@ function render(p,G,r){
 
   // legenda
   const bindReason=r.bindingCA?'<span class="badge ca">limitado pelo CA</span>':(r.bindingAlt?'<span class="badge geo">corte altimétrico</span>':'<span class="badge geo">limitado pela geometria</span>');
-  $('leg').innerHTML=`Lote ${p.testada}×${p.profund} m · TO ${(p.TO*100).toFixed(0)}% · af. frontal ${p.afFrontal} m`+`<br>${bindReason}`;
+  let ousBadges='';
+  if(r.isGenUR) ousBadges+=' <span class="badge ur-gen">⬆ Gerador de UR</span>';
+  if(r.isRecUR) ousBadges+=' <span class="badge ur-rec">⬇ Receptor de UR</span>';
+  if(r.pagaAMIS) ousBadges+=' <span class="badge amis">◆ Paga AMIS</span>';
+  const modoOUSbadge=document.querySelector('.modeSel .mode[data-mode="ous"]').classList.contains('active');
+  if(r.adereOUS&&r.arbStep>0&&modoOUSbadge) ousBadges+=` <span class="badge arb">🌳 1 árvore/${r.arbStep}m testada</span>`;
+  $('leg').innerHTML=`Lote ${p.testada}×${p.profund} m · TO ${(p.TO*100).toFixed(0)}% · af. frontal ${p.afFrontal} m`+`<br>${bindReason}${ousBadges}`;
 
   draw(p,G);
 }
@@ -573,14 +587,14 @@ function draw(p,G){
   const cv=$('cv'), ctx=cv.getContext('2d');
   // (11) ajusta canvas ao tamanho real do elemento
   const rect=cv.getBoundingClientRect();
-  cv.width=Math.round(rect.width*devicePixelRatio)||900;
-  cv.height=Math.round(rect.height*devicePixelRatio)||560;
-  ctx.scale(devicePixelRatio,devicePixelRatio);
-  const W=cv.width/devicePixelRatio, H=cv.height/devicePixelRatio;
+  cv.width=Math.round(rect.width)||900;
+  cv.height=Math.round(rect.height)||560;
+  const W=cv.width, H=cv.height;
   ctx.clearRect(0,0,W,H);
   const rot=(_rot)*Math.PI/180;      // (9) usa variável global _rot
   const zoomF=_zoom/100;             // usa variável global _zoom
   const T=p.testada, D=p.profund, peDir=p.peDir;
+  const modoOUS=document.querySelector('.modeSel .mode[data-mode="ous"]').classList.contains('active');
   // projeção iso com rotação em torno de z
   const ax=Math.PI/6;
   const cx0=T/2, cy0=D/2;
@@ -595,7 +609,9 @@ function draw(p,G){
   // escala automática
   let pts=[];
   const Hmax=Math.max(G.floors.length*peDir,6);
-  [[0,-D*0.5,0],[T,-D*0.5,0],[0,D,0],[T,D,0],[0,0,Hmax],[T,D,Hmax]].forEach(q=>pts.push(proj(...q)));
+  const cw_bb = p.calcada || 4;
+  const tyTree = (modoOUS && p.adere && p.arbStep>0) ? -(cw_bb*1.4) : -D*0.5;
+  [[0,tyTree,0],[T,tyTree,0],[0,-D*0.5,0],[T*1.15,-D*0.5,0],[0,D,0],[T,D,0],[0,0,Hmax],[T,D,Hmax]].forEach(q=>pts.push(proj(...q)));
   let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
   pts.forEach(q=>{minx=Math.min(minx,q[0]);maxx=Math.max(maxx,q[0]);miny=Math.min(miny,q[1]);maxy=Math.max(maxy,q[1]);});
   const sc=Math.min(W*0.82/(maxx-minx), H*0.82/(maxy-miny))*zoomF;
@@ -605,8 +621,6 @@ function draw(p,G){
 
   // rua (via) à frente do lote (y<0)
   poly([[ -T*0.15,-D*0.55,0],[T*1.15,-D*0.55,0],[T*1.15,0,0],[-T*0.15,0,0]],'#1b2434','#2b3550',1);
-  // calçada
-  poly([[0,-D*0.12,0.02],[T,-D*0.12,0.02],[T,0,0.02],[0,0,0.02]],'#26314a',null);
   // faixa central da via
   ctx.setLineDash([6,6]); const a=S(-T*0.1,-D*0.33,0.03),b=S(T*1.1,-D*0.33,0.03);
   ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.strokeStyle='#48577a';ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
@@ -628,11 +642,56 @@ function draw(p,G){
     poly([[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],top,'#0c1320',0.8);   // topo
   });
 
+
+  // calçada — desenhada após pavimentos mas antes das árvores
+  // calçada — largura parametrizada
+  const cw=p.calcada;  // largura real em metros
+  poly([[0,-cw,0.01],[T,-cw,0.01],[T,0,0.01],[0,0,0.01]],'#2e3d55',null);
+
   // cota de testada e profundidade
   ctx.fillStyle='#8fa3cc';ctx.font='11px Segoe UI';
   let m1=S(T/2,-D*0.05,0); ctx.textAlign='center';ctx.fillText(p.testada+' m (testada)',m1[0],m1[1]);
   ctx.save();let m2=S(-0.6,D/2,0);ctx.translate(m2[0],m2[1]);ctx.fillText(p.profund+' m',0,0);ctx.restore();
-}
+
+  // árvores na testada — só em OUS (não em Lei 11.181)
+  if(modoOUS && p.adere && p.arbStep>0){
+    const nTrees=Math.max(1,Math.floor(p.testada/p.arbStep));
+    const spacing=p.testada/nTrees;
+    const tySide = -(p.calcada*0.55);  // meio da calçada (55% da largura a partir do lote)
+    for(let ti=0;ti<nTrees;ti++){
+      const tx=spacing*(ti+0.5);
+      const ty=tySide;
+      const th=Math.max(4,peDir*2.2);
+      const tw=0.22, tth=th*0.42;
+      const crM=Math.max(2.2,peDir*1.0);
+      const cr=Math.max(18, crM*sc);
+
+      ctx.save();
+      ctx.globalAlpha=0.5;  // 50% transparência
+
+      // tronco
+      const pb=S(tx,ty,0), pt=S(tx,ty,tth);
+      ctx.beginPath(); ctx.moveTo(pb[0],pb[1]); ctx.lineTo(pt[0],pt[1]);
+      ctx.strokeStyle='#7c4a1a'; ctx.lineWidth=Math.max(2,tw*sc*1.4); ctx.stroke();
+
+      // copa — esfera com gradiente radial
+      const pc=S(tx,ty,tth+crM*0.6);
+      const gx=pc[0]-cr*0.28, gy=pc[1]-cr*0.32;
+      let grad;
+      try {
+        grad=ctx.createRadialGradient(gx,gy,cr*0.05, pc[0],pc[1],cr);
+        grad.addColorStop(0,'#80e080');
+        grad.addColorStop(0.4,'#3aaa3a');
+        grad.addColorStop(1,'#1a5020');
+      } catch(e){ grad='#3aaa3a'; }
+      ctx.beginPath(); ctx.arc(pc[0],pc[1],cr,0,Math.PI*2);
+      ctx.fillStyle=grad; ctx.fill();
+      ctx.strokeStyle='#0e3010'; ctx.lineWidth=1; ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+} // end draw()
 
 // ── variáveis de rotação/zoom (para mouse drag + scroll) ──
 let _rot=22, _zoom=100;
@@ -680,7 +739,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') modal.classList.re
 
 // ---- modo Lei 11.181/2019  x  OUS Somos Centro ----
 let lastOus="OUS – Subárea 1A";
-const OUS_ONLY=['rowCenario','rowTipo','rowSupUR','rowFundo','rowVUR','rowAMIS'];
+const OUS_ONLY=['rowCenario','rowTipo','rowSupUR','rowFundo','rowVUR','rowAMIS','rowArb'];
 const ALL_HIDE=[...OUS_ONLY,'rowPrazo','rowRegime','rowFatorAFP'];
 
 function updateVisibility(){
@@ -692,7 +751,7 @@ function updateVisibility(){
   if(lei){
     ALL_HIDE.forEach(id=>{const el=$(id);if(el)el.style.display='none';});
   } else if(naoadere){
-    ['rowPrazo','rowTipo','rowSupUR','rowFundo','rowVUR','rowAMIS','rowFatorAFP'].forEach(id=>{
+    ['rowPrazo','rowTipo','rowSupUR','rowFundo','rowVUR','rowAMIS','rowFatorAFP','rowArb'].forEach(id=>{
       const el=$(id);if(el)el.style.display='none';
     });
   } else if(fora){
